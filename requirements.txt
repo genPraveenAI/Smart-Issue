@@ -1,0 +1,9 @@
+streamlit>=1.50,<2
+pillow>=11,<13
+langgraph>=1.0,<2
+sentence-transformers>=5.0,<6
+transformers>=5.0,<6
+chromadb>=1.0,<2
+langchain-ollama>=0.3,<1
+requests>=2.32,<3
+python-dotenv>=1.0,<2

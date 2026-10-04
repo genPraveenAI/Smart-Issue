@@ -1,0 +1,92 @@
+[
+  {
+    "id": "KB-1042",
+    "title": "Card payment declined after verification",
+    "summary": "Review a declined card payment without creating duplicate authorisations or holds.",
+    "category": "Payments",
+    "updated": "2026-10-01",
+    "steps": [
+      "Check the transaction timeline for a pending authorisation before retrying.",
+      "Confirm the customer has not reached their card or daily payment limit.",
+      "If the hold is still pending after 10 minutes, do not submit another payment. Record the reference and escalate."
+    ]
+  },
+  {
+    "id": "KB-0871",
+    "title": "Transfers showing as pending",
+    "summary": "Check the transfer timeline and expected arrival window before raising a report.",
+    "category": "Transfers",
+    "updated": "2026-09-26",
+    "steps": [
+      "Open the transfer details and confirm the expected arrival window.",
+      "Check whether the beneficiary is new or needs additional verification.",
+      "If the expected window has passed, capture the transfer reference and report it."
+    ]
+  },
+  {
+    "id": "KB-0228",
+    "title": "Refreshing a locked customer session",
+    "summary": "Restore a stalled customer session without repeating a payment or transfer.",
+    "category": "Customer access",
+    "updated": "2026-09-18",
+    "steps": [
+      "Confirm the customer is not in the middle of a pending payment or transfer.",
+      "Return to the customer overview and reopen the session once.",
+      "If the session locks again, stop and report the time and customer-safe reference."
+    ]
+  },
+  {
+    "id": "KB-0712",
+    "title": "Update a customer's contact or address details",
+    "summary": "A controlled checklist for maintaining customer demographic details.",
+    "category": "Customer profiles",
+    "updated": "2026-10-03",
+    "steps": [
+      "Complete the required identity and authority checks using the approved customer-verification process before viewing or changing a profile.",
+      "Confirm the exact fields the customer asked to change and review the current record with them.",
+      "Update only the authorized fields, check spelling and contact details, and save the change in the customer record.",
+      "Read back the changed fields and confirm the update outcome without exposing unrelated account information.",
+      "If verification fails, a field is restricted, or the record does not save, do not retry with guessed details; follow the approved escalation route."
+    ]
+  },
+  {
+    "id": "KB-1182",
+    "title": "Open an additional customer account",
+    "summary": "Preparation and confirmation steps for an associate-assisted account opening.",
+    "category": "Accounts",
+    "updated": "2026-10-03",
+    "steps": [
+      "Find the correct customer record and complete the required identity, eligibility, and authority checks under current policy.",
+      "Confirm the requested product, key terms, fees, access method, and any required disclosures with the customer.",
+      "Complete required suitability, consent, funding, and application checks for the selected product before submission.",
+      "Submit once and wait for a confirmed outcome. If the result is pending or unclear, check the application status before trying again.",
+      "Confirm the account reference and status to the customer, and record any required follow-up using the approved workflow."
+    ]
+  },
+  {
+    "id": "KB-0936",
+    "title": "Customer profile does not match submitted details",
+    "summary": "Resolve a mismatch carefully without overwriting the verified customer record.",
+    "category": "Customer profiles",
+    "updated": "2026-10-03",
+    "steps": [
+      "Pause the requested change and confirm the customer record using the approved identity-verification process.",
+      "Compare the submitted value with the existing profile and clarify the exact correction with the customer.",
+      "Do not change verified identity attributes solely to bypass a validation error or application control.",
+      "If the mismatch remains, capture the non-sensitive error reference and route it to the authorized profile-maintenance team."
+    ]
+  },
+  {
+    "id": "KB-1540",
+    "title": "New account application is pending",
+    "summary": "Check an incomplete account-opening result before starting another application.",
+    "category": "Accounts",
+    "updated": "2026-10-03",
+    "steps": [
+      "Search the customer record for an application or account created during the current session.",
+      "Review the application status and any outstanding verification or customer actions.",
+      "Do not submit a duplicate application while the original request is pending.",
+      "If the status has not updated within the expected processing window, capture the application reference and follow the product support route."
+    ]
+  }
+]

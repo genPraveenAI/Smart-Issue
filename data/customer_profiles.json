@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "notice": "Synthetic demonstration records only. Do not use live customer data.",
+  "profiles": [
+    {
+      "customer_id": "CUST-1042",
+      "first_name": "Amina",
+      "last_name": "Patel",
+      "date_of_birth": "1987-04-16",
+      "email": "amina.patel@example.test",
+      "phone": "+44 7700 900101",
+      "address_line_1": "12 Example Street",
+      "address_line_2": "Flat 3",
+      "city": "London",
+      "postcode": "EX1 1AA",
+      "country": "United Kingdom",
+      "updated_at": "2026-10-01T09:00:00+00:00",
+      "accounts": [
+        {
+          "account_id": "AC-DEMO-1042",
+          "product_type": "Current account",
+          "currency": "GBP",
+          "branch": "042",
+          "status": "Active",
+          "opened_at": "2024-02-12T10:00:00+00:00"
+        }
+      ]
+    },
+    {
+      "customer_id": "CUST-2087",
+      "first_name": "Daniel",
+      "last_name": "Reed",
+      "date_of_birth": "1991-09-22",
+      "email": "daniel.reed@example.test",
+      "phone": "+44 7700 900202",
+      "address_line_1": "8 Market Lane",
+      "address_line_2": "",
+      "city": "Bristol",
+      "postcode": "EX2 2BB",
+      "country": "United Kingdom",
+      "updated_at": "2026-09-28T14:30:00+00:00",
+      "accounts": []
+    },
+    {
+      "customer_id": "CUST-3165",
+      "first_name": "Leila",
+      "last_name": "Hassan",
+      "date_of_birth": "1984-12-03",
+      "email": "leila.hassan@example.test",
+      "phone": "+44 7700 900303",
+      "address_line_1": "24 Sample Road",
+      "address_line_2": "",
+      "city": "Manchester",
+      "postcode": "EX3 3CC",
+      "country": "United Kingdom",
+      "updated_at": "2026-09-25T11:15:00+00:00",
+      "accounts": [
+        {
+          "account_id": "AC-DEMO-3165",
+          "product_type": "Easy-access savings",
+          "currency": "GBP",
+          "branch": "042",
+          "status": "Active",
+          "opened_at": "2025-06-06T08:45:00+00:00"
+        }
+      ]
+    },
+    {
+      "customer_id": "CUST-4421",
+      "first_name": "Oliver",
+      "last_name": "Chen",
+      "date_of_birth": "1995-06-11",
+      "email": "oliver.chen@example.test",
+      "phone": "+44 7700 900404",
+      "address_line_1": "5 Placeholder Crescent",
+      "address_line_2": "Unit 2",
+      "city": "Leeds",
+      "postcode": "EX4 4DD",
+      "country": "United Kingdom",
+      "updated_at": "2026-09-20T16:20:00+00:00",
+      "accounts": []
+    }
+  ]
+}

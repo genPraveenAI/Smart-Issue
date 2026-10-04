@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root { color-scheme: light; font-family: 'Segoe UI', sans-serif; }
+      body { margin: 0; color: #172b4d; }
+      .capture { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; }
+      button { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 12px; color: #fff; border: 1px solid #012169; border-radius: 4px; background: #012169; font: 600 12px 'Segoe UI', sans-serif; cursor: pointer; }
+      button:hover { background: #001747; }
+      button:disabled { opacity: .55; cursor: wait; }
+      .mark { width: 15px; height: 12px; position: relative; border: 1px solid currentColor; border-radius: 2px; }
+      .mark::after { content: ''; position: absolute; width: 5px; height: 5px; top: 3px; left: 4px; border: 1px solid currentColor; border-radius: 50%; }
+      .status { color: #5d6b82; font-size: 11px; line-height: 1.4; }
+      .error { color: #e31837; }
+    </style>
+  </head>
+  <body>
+    <div class="capture">
+      <button id="raise" type="button" title="Raise an issue, share this tab, and scroll through the page to capture it">
+        <span class="mark" aria-hidden="true"></span> Still failing · raise issue
+      </button>
+      <span id="status" class="status" role="status">Share this tab, scroll through the issue, then stop sharing to finish the capture.</span>
+    </div>
+    <script>
+      const raiseButton = document.getElementById('raise');
+      const status = document.getElementById('status');
+      const send = (type, data = {}) => parent.postMessage({ isStreamlitMessage: true, type, ...data }, '*');
+      const MAX_FRAMES = 10;
+      const MAX_PAYLOAD_CHARS = 3.2 * 1024 * 1024;
+      let stream;
+      let video;
+      let frameTimer;
+      let captureTimer;
+      let frames = [];
+      let payloadChars = 0;
+      let previousSample;
+      let finalized = false;
+
+      const finishCapture = (errorMessage = '') => {
+        if (finalized) return;
+        finalized = true;
+        clearInterval(frameTimer);
+        clearTimeout(captureTimer);
+        if (errorMessage || frames.length === 0) {
+          const message = errorMessage || 'No page frames were captured. Click to try again.';
+          status.textContent = message;
+          status.classList.add('error');
+          send('streamlit:setComponentValue', { value: { action: 'error', message } });
+        } else {
+          status.textContent = `Captured ${frames.length} scroll positions. Preparing full-page evidence…`;
+          send('streamlit:setComponentValue', {
+            value: { action: 'captured', frames, mimeType: 'image/jpeg' }
+          });
+        }
+        stream?.getTracks().forEach((track) => { track.onended = null; track.stop(); });
+        raiseButton.disabled = false;
+        raiseButton.textContent = 'Still failing · raise issue';
+      };
+
+      const captureFrame = () => {
+        if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || frames.length >= MAX_FRAMES) return;
+        const sample = document.createElement('canvas');
+        sample.width = 32;
+        sample.height = 18;
+        const sampleContext = sample.getContext('2d', { willReadFrequently: true });
+        sampleContext.drawImage(video, 0, 0, sample.width, sample.height);
+        const currentSample = sampleContext.getImageData(0, 0, sample.width, sample.height).data;
+        if (previousSample) {
+          let difference = 0;
+          for (let index = 0; index < currentSample.length; index += 4) {
+            difference += Math.abs(currentSample[index] - previousSample[index]);
+            difference += Math.abs(currentSample[index + 1] - previousSample[index + 1]);
+            difference += Math.abs(currentSample[index + 2] - previousSample[index + 2]);
+          }
+          if (difference / (sample.width * sample.height * 3) < 4) return;
+        }
+        previousSample = currentSample;
+
+        const scale = Math.min(1, 1280 / video.videoWidth, 900 / video.videoHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) return;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frame = canvas.toDataURL('image/jpeg', 0.62);
+        if (payloadChars + frame.length > MAX_PAYLOAD_CHARS) {
+          status.textContent = `Captured ${frames.length} positions. Stop sharing to finish the capture.`;
+          clearInterval(frameTimer);
+          return;
+        }
+        frames.push(frame);
+        payloadChars += frame.length;
+        status.textContent = `Captured ${frames.length}/${MAX_FRAMES}. Scroll to the remaining issue details; stop sharing when finished.`;
+        if (frames.length >= MAX_FRAMES) {
+          status.textContent = 'Frame limit reached. Stop sharing to finish the capture.';
+          clearInterval(frameTimer);
+        }
+      };
+
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'streamlit:render') send('streamlit:setFrameHeight', { height: 64 });
+      });
+      send('streamlit:componentReady', { apiVersion: 1 });
+      send('streamlit:setFrameHeight', { height: 64 });
+
+      raiseButton.addEventListener('click', async () => {
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          status.textContent = 'Screen capture is unavailable in this browser.';
+          status.classList.add('error');
+          return;
+        }
+        raiseButton.disabled = true;
+        status.textContent = 'Choose this application tab in the browser prompt.';
+        status.classList.remove('error');
+        frames = [];
+        payloadChars = 0;
+        previousSample = null;
+        finalized = false;
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: false,
+            preferCurrentTab: true,
+            selfBrowserSurface: 'include'
+          });
+          video = document.createElement('video');
+          video.muted = true;
+          video.playsInline = true;
+          video.srcObject = stream;
+          await video.play();
+          if (!video.videoWidth || !video.videoHeight) {
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error('The shared screen did not become ready.')), 5000);
+              video.addEventListener('loadedmetadata', () => { clearTimeout(timeout); resolve(); }, { once: true });
+            });
+          }
+          const track = stream.getVideoTracks()[0];
+          track.addEventListener('ended', () => finishCapture(), { once: true });
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          captureFrame();
+          frameTimer = setInterval(captureFrame, 650);
+          captureTimer = setTimeout(() => finishCapture(), 60000);
+          status.textContent = 'Scroll through the full page. Stop sharing from Chrome to finish the capture.';
+          raiseButton.textContent = 'Sharing · scroll then stop';
+        } catch (error) {
+          const message = error?.name === 'NotAllowedError' ? 'Screen sharing was cancelled. Click raise issue to try again.' : (error?.message || 'Capture failed. Click raise issue to try again.');
+          status.textContent = message;
+          status.classList.add('error');
+          send('streamlit:setComponentValue', { value: { action: 'error', message } });
+          stream?.getTracks().forEach((track) => track.stop());
+          raiseButton.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
