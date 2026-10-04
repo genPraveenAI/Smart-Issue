@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ResolveDesk
 
 A Python and Streamlit prototype of the associate's banking workspace, with contextual RAG support, evidence review, and reviewer-approved Jira escalation.
@@ -55,3 +56,7 @@ The included knowledge entries and host events are sample data, not bank-approve
 - `.streamlit/config.toml`: loopback-only server binding and local file-watcher settings.
 - `data/knowledge_base.json`: searchable sample support guidance for payments, transfers, customer profiles, and account opening.
 - `data/customer_profiles.json`: synthetic seed customer profiles for the Customer services workspace.
+=======
+# Smart-Issue
+A Solution to capture and share all details of the app issue and raise it in JIRA tool
+>>>>>>> bfc65e8767f0b28958ea7a3ae0da20ff3a65a620
