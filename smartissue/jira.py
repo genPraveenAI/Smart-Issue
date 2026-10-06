@@ -157,6 +157,57 @@ def create_jira_issue(
     }
 
 
+def _adf_to_text(node: Any) -> str:
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return ""
+    if node.get("type") == "text":
+        return str(node.get("text", ""))
+    parts = [_adf_to_text(child) for child in node.get("content", []) or []]
+    if node.get("type") in {"paragraph", "heading", "listItem", "bulletList", "orderedList", "codeBlock"}:
+        return "".join(parts) + "\n"
+    return "".join(parts)
+
+
+def search_jira_issues(jql: str, *, limit: int = 25) -> list[dict[str, Any]]:
+    """Return plain-text issue records (summary, description, status, comments) matching a JQL query."""
+    problem = jira_configuration_problem()
+    if problem:
+        raise RuntimeError(problem)
+    response = requests.post(
+        f"{os.environ['JIRA_BASE_URL'].strip().rstrip('/')}/rest/api/3/search/jql",
+        auth=(os.environ["JIRA_EMAIL"], os.environ["JIRA_API_TOKEN"]),
+        json={
+            "jql": jql,
+            "maxResults": max(1, min(limit, 100)),
+            "fields": ["summary", "description", "status", "resolutiondate", "labels", "issuetype", "comment"],
+        },
+        headers={"Accept": "application/json"},
+        timeout=20,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Jira search failed with HTTP {response.status_code}.")
+    issues = []
+    for item in response.json().get("issues", []):
+        fields = item.get("fields", {})
+        comments = (fields.get("comment") or {}).get("comments", [])
+        issues.append(
+            {
+                "key": item.get("key", ""),
+                "summary": fields.get("summary") or "",
+                "description": _adf_to_text(fields.get("description")).strip(),
+                "status": (fields.get("status") or {}).get("name", ""),
+                "resolved": (fields.get("resolutiondate") or "")[:10],
+                "labels": fields.get("labels") or [],
+                "issue_type": (fields.get("issuetype") or {}).get("name", ""),
+                "comments": [_adf_to_text(comment.get("body")).strip() for comment in comments],
+                "comment_authors": [(comment.get("author") or {}).get("accountId", "") for comment in comments],
+            }
+        )
+    return issues
+
+
 def build_jira_agent():
     def associate_confirmation_gate(state: JiraAgentState) -> dict[str, Any]:
         if not state.get("associate_confirmed") or not state.get("associate_id", "").strip():

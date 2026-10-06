@@ -15,26 +15,19 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 
+from .text import clean_text, redact_sensitive_text
+
 ROOT = Path(__file__).resolve().parent.parent
 KNOWLEDGE_PATH = ROOT / "data" / "knowledge_base.json"
+JIRA_KNOWLEDGE_PATH = ROOT / ".data" / "jira_knowledge.json"
 MODEL_ID = os.getenv("EMBEDDING_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2")
 CONTEXT_BUDGET = int(os.getenv("MAX_CONTEXT_TOKENS", "420"))
 MAX_RESULTS = 4
-MIN_RETRIEVAL_SCORE = float(os.getenv("MIN_RETRIEVAL_SCORE", "0.42"))
+MIN_RETRIEVAL_SCORE = float(os.getenv("MIN_RETRIEVAL_SCORE", "0.30"))
 OPENROUTER_DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 INGEST_BATCH_SIZE = 64
 CHROMA_READ_PAGE_SIZE = 1000
 JSON_CHUNK_SCHEMA_VERSION = 1
-
-
-def redact_sensitive_text(value: str) -> str:
-    value = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[redacted email]", value, flags=re.IGNORECASE)
-    value = re.sub(r"\b(?:\d[ -]?){8,19}\b", "[redacted number]", value)
-    return re.sub(r"\b(?:\+?\d[\d(). -]{6,}\d)\b", "[redacted phone]", value)
-
-
-def clean_text(value: str, limit: int) -> str:
-    return re.sub(r"\s+", " ", redact_sensitive_text(value)).strip()[:limit]
 
 
 def normalize_knowledge_articles(raw_articles: Any) -> list[dict[str, Any]]:
@@ -197,6 +190,13 @@ class LocalKnowledgeBase:
             raise RuntimeError(f"Could not read knowledge base at {self.knowledge_path}.") from error
         except json.JSONDecodeError as error:
             raise ValueError(f"Knowledge base JSON is invalid at line {error.lineno}, column {error.colno}.") from error
+        if self.knowledge_path == KNOWLEDGE_PATH and JIRA_KNOWLEDGE_PATH.is_file():
+            try:
+                jira_articles = json.loads(JIRA_KNOWLEDGE_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                jira_articles = []
+            known_ids = {item.get("id") for item in source if isinstance(item, dict)}
+            source = [*source, *(item for item in jira_articles if isinstance(item, dict) and item.get("id") not in known_ids)]
         return normalize_knowledge_articles(source)
 
     def _existing_chunks(self) -> dict[str, dict[str, Any]]:

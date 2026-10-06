@@ -6,4 +6,4 @@ transformers>=5.0,<6
 chromadb>=1.0,<2
 langchain-ollama>=0.3,<1
 requests>=2.32,<3
-python-dotenv>=1.0,<2
+python-dotenv>=1.0,<2mcp>=1.2,<2

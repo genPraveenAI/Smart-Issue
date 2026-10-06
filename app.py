@@ -1,9 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import base64
 import hashlib
 import os
 import platform
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -64,9 +65,14 @@ st.markdown(
     .score { color:var(--accenture-purple); font: .7rem 'DM Mono',monospace; }
     [data-testid="stForm"] { border:1px solid var(--line); border-radius:4px; background:#fff; }
     .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] { border:1px solid var(--bank-blue); background:var(--bank-blue); color:#fff; }
+    .stButton > button[kind="primary"] *, .stFormSubmitButton > button[kind="primary"] * { color:#fff !important; }
     .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button[kind="primary"]:hover { border-color:#001747; background:#001747; color:#fff; }
-    .stButton > button[kind="secondary"] { border:1px solid var(--accenture-purple); color:var(--accenture-purple); background:#fff; }
-    .stButton > button[kind="secondary"]:hover { border-color:var(--accenture-purple); color:var(--accenture-purple); background:#faf5ff; }
+    .stButton > button[kind="secondary"], .stLinkButton > a { border:1px solid var(--bank-blue); color:var(--bank-blue); background:#fff; }
+    .stButton > button[kind="secondary"] *, .stLinkButton > a * { color:var(--bank-blue) !important; }
+    .stButton > button[kind="secondary"]:hover, .stLinkButton > a:hover { border-color:var(--bank-blue); color:var(--bank-blue); background:var(--blue-tint); }
+    .assist-card { padding:.9rem 1rem; border:1px solid var(--line); border-left:4px solid var(--bank-red); border-radius:4px; background:var(--blue-tint); }
+    .assist-card b { color:var(--bank-blue); }
+    div[role="dialog"] { border-top:4px solid var(--bank-blue); border-radius:4px; }
     div[data-testid="stFileUploader"] { border:1px dashed #b8c4d5; border-radius:4px; background:#fff; }
     .app-footer { margin-top:2rem; padding:1rem 0 .25rem; border-top:1px solid var(--line); color:var(--muted); font-size:.75rem; text-align:right; }
     hr { border-color:var(--line); }
@@ -84,6 +90,37 @@ def get_agent_resources(knowledge_source_hash: str) -> tuple[LocalKnowledgeBase,
 
     knowledge_base = get_knowledge_base(knowledge_source_hash)
     return knowledge_base, build_triage_graph(knowledge_base)
+
+
+def _build_agent_resources_for_warmup(knowledge_source_hash: str) -> tuple[LocalKnowledgeBase, Any]:
+    from smartissue.agent import get_knowledge_base
+    from smartissue.graphs import build_triage_graph
+
+    knowledge_base = get_knowledge_base(knowledge_source_hash)
+    return knowledge_base, build_triage_graph(knowledge_base)
+
+
+@st.cache_resource(show_spinner=False)
+def get_agent_warmup_executor() -> ThreadPoolExecutor:
+    return ThreadPoolExecutor(max_workers=1, thread_name_prefix="resolvedesk-knowledge")
+
+
+@st.cache_resource(show_spinner=False)
+def get_agent_warmup_future(knowledge_source_hash: str) -> Future[tuple[LocalKnowledgeBase, Any]]:
+    return get_agent_warmup_executor().submit(_build_agent_resources_for_warmup, knowledge_source_hash)
+
+
+@st.cache_resource(show_spinner=False)
+def get_jira_sync_executor() -> ThreadPoolExecutor:
+    return ThreadPoolExecutor(max_workers=1, thread_name_prefix="resolvedesk-jira-sync")
+
+
+def current_knowledge_hash() -> str:
+    from smartissue.jira_kb import knowledge_fingerprint, refresh_jira_knowledge_if_due
+
+    # The refresh runs in the background; changed articles are picked up on a later rerun.
+    get_jira_sync_executor().submit(refresh_jira_knowledge_if_due)
+    return knowledge_fingerprint()
 
 
 def initialize_state() -> None:
@@ -251,6 +288,73 @@ def run_search(graph: Any, title: str, description: str) -> dict[str, Any]:
         return run_triage(graph, title, description)
 
 
+def render_insight_cards(active_error: dict[str, Any], matches: list[dict[str, Any]], prefix: str) -> None:
+    for index, article in enumerate(matches, start=1):
+        with st.container(border=True):
+            st.markdown(
+                f"<span class='kb-id'>Knowledge base source · {article['id']} · {article['category']}</span>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"#### {article['title']}")
+            st.write(article["summary"])
+            with st.expander("Resolution steps", expanded=index == 1):
+                for resolution_step in article["steps"]:
+                    st.markdown(f"- {resolution_step}")
+                if st.button("Mark resolution as tried", key=f"{prefix}_tried_{active_error['event_id']}_{article['id']}"):
+                    if article["id"] not in st.session_state.attempted_ids:
+                        st.session_state.attempted_ids.append(article["id"])
+                        st.session_state.attempted_steps.extend(article["steps"])
+                    st.success("Recorded with this application event.")
+    if st.session_state.attempted_ids:
+        st.caption(f"Tried: {', '.join(st.session_state.attempted_ids)}")
+
+
+@st.dialog("Resolution insights", width="medium")
+def resolution_insights_dialog(mode: str) -> None:
+    active_error = st.session_state.active_error
+    if not active_error:
+        return
+    result = st.session_state.triage or {}
+    matches = result.get("matches", [])
+    st.markdown(f"**{active_error['error_code']}** · {active_error['workflow']}")
+    st.caption(
+        f"{len(matches)} relevant support note(s) · {result.get('context_tokens', 0)} context tokens · "
+        f"Event {active_error['event_id']}"
+    )
+    if not matches:
+        st.warning("No close support note found. You can still raise an issue.")
+    render_insight_cards(active_error, matches, mode)
+    st.caption("Still failing? Close this window and use Raise an issue on the page.")
+    if mode == "payments" and st.button("Customer request completed", type="primary", use_container_width=True):
+        st.session_state.active_error = None
+        st.session_state.active_host_log = None
+        st.session_state.triage = None
+        st.session_state.step = 1
+        st.session_state.last_resolution = "Customer request completed using support guidance."
+        st.rerun()
+
+
+def render_insights_launcher(mode: str, label: str) -> None:
+    result = st.session_state.triage or {}
+    count = len(result.get("matches", []))
+    active_error = st.session_state.active_error
+    st.markdown(
+        f"<div class='assist-card'><b>Resolution assistant</b><br>"
+        f"{active_error['error_code']} · {count} support note(s) ready</div>",
+        unsafe_allow_html=True,
+    )
+    if st.button(label, type="primary", use_container_width=True, key=f"open_insights_{mode}"):
+        resolution_insights_dialog(mode)
+    elif st.session_state.pop("open_insights_dialog", False):
+        resolution_insights_dialog(mode)
+    st.caption("Still failing after the guidance? Share the app tab to raise an issue with evidence.")
+    capture_result = capture_screen(key=f"{mode}_raise_issue_capture_{st.session_state.capture_nonce}")
+    if accept_screen_capture(capture_result, active_error, (st.session_state.triage or {}).get("matches", [])):
+        st.rerun()
+    if st.session_state.capture_error:
+        st.error(st.session_state.capture_error)
+
+
 def render_issue_desk(knowledge_base: LocalKnowledgeBase, graph: Any) -> None:
     from smartissue.host_adapter import (
         make_demo_error_event,
@@ -274,7 +378,10 @@ def render_issue_desk(knowledge_base: LocalKnowledgeBase, graph: Any) -> None:
         render_evidence_review(knowledge_base, graph)
         return
 
-    application, assistant = st.columns([1.12, .88], gap="large")
+    if st.session_state.active_error:
+        application, assistant = st.columns([1.12, .88], gap="large")
+    else:
+        application, assistant = st.container(), None
     with application:
         st.markdown("### Customer operation")
         st.caption("Customer details are populated from the shared customer search.")
@@ -322,8 +429,7 @@ def render_issue_desk(knowledge_base: LocalKnowledgeBase, graph: Any) -> None:
                     operation_context=operation_context,
                     customer_id=customer["customer_id"],
                 )
-                with st.spinner("Application error received · searching support guidance…"):
-                    st.session_state.triage = triage_application_error(graph, event)
+                st.session_state.triage = None
                 st.session_state.active_error = {**event.to_dict(), "customer_id": customer["customer_id"]}
                 st.session_state.active_host_log = event.diagnostic_log
                 st.session_state.title = event.title
@@ -345,49 +451,21 @@ def render_issue_desk(knowledge_base: LocalKnowledgeBase, graph: Any) -> None:
             st.error(f"{active_error['error_code']} · {active_error['title']}")
             st.caption(f"Event {active_error['event_id']} · {active_error['occurred_at']}")
 
-    with assistant:
-        st.markdown("### Resolution insights")
-        st.caption("Contextual support · linked to the current application event")
-        active_error = st.session_state.active_error
-        if not active_error:
-            st.info("Ready to help. Continue a customer request to see relevant support guidance.")
-        else:
-            capture_result = capture_screen(key=f"raise_issue_capture_{st.session_state.capture_nonce}")
-            if accept_screen_capture(capture_result, active_error, st.session_state.triage.get("matches", [])):
-                st.rerun()
-            if st.session_state.capture_error:
-                st.error(st.session_state.capture_error)
-            result = st.session_state.triage or {}
-            matches = result.get("matches", [])
-            st.markdown(f"**{active_error['error_code']}** · {active_error['workflow']}")
-            st.caption(f"{len(matches)} relevant support note(s) · {result.get('context_tokens', 0)} context tokens")
-            for index, article in enumerate(matches, start=1):
-                with st.container(border=True):
-                    st.markdown(
-                        f"<span class='kb-id'>Knowledge base source · {article['id']} · {article['category']}</span>",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(f"#### {article['title']}")
-                    st.write(article["summary"])
-                    with st.expander("Resolution steps", expanded=index == 1):
-                        for resolution_step in article["steps"]:
-                            st.markdown(f"- {resolution_step}")
-                        if st.button("Mark resolution as tried", key=f"tried_{active_error['event_id']}_{article['id']}"):
-                            if article["id"] not in st.session_state.attempted_ids:
-                                st.session_state.attempted_ids.append(article["id"])
-                                st.session_state.attempted_steps.extend(article["steps"])
-                            st.success("Recorded with this application event.")
-            if st.session_state.attempted_ids:
-                st.caption(f"Tried: {', '.join(st.session_state.attempted_ids)}")
-            if st.button("Customer request completed", use_container_width=True):
-                st.session_state.active_error = None
-                st.session_state.active_host_log = None
-                st.session_state.triage = None
-                st.session_state.step = 1
-                st.session_state.last_resolution = "Customer request completed using support guidance."
-                st.rerun()
-        if st.session_state.get("last_resolution"):
-            st.success(st.session_state.pop("last_resolution"))
+    if assistant is not None:
+        with assistant:
+            if st.session_state.triage is None:
+                if st.button("Get resolution guidance", type="primary", use_container_width=True, key="get_guidance_payments"):
+                    try:
+                        with st.spinner("Searching support guidance for this error…"):
+                            st.session_state.triage = triage_application_error(graph, st.session_state.active_error)
+                        st.session_state.open_insights_dialog = True
+                        st.rerun()
+                    except (OSError, RuntimeError, ValueError) as error:
+                        st.error(f"Support guidance could not be loaded: {error}")
+            else:
+                render_insights_launcher("payments", "Open resolution insights")
+    if st.session_state.get("last_resolution"):
+        st.success(st.session_state.pop("last_resolution"))
 
 
 def collect_diagnostics() -> dict[str, str]:
@@ -613,39 +691,11 @@ def render_customer_issue_resolution(
         st.error("Knowledge resources are unavailable for this request.")
         return
 
-    result = st.session_state.triage or {}
-    matches = result.get("matches", [])
     st.markdown("### Resolution insights")
     insights, operation = st.columns([.95, 1.05], gap="large")
     with insights:
         st.caption("Guidance matched to the current customer-service error")
-        st.markdown(f"**{active_error['error_code']}** · {active_error['workflow']}")
-        st.caption(f"{len(matches)} relevant support note(s) · {result.get('context_tokens', 0)} context tokens")
-        capture_result = capture_screen(key=f"customer_raise_issue_capture_{st.session_state.capture_nonce}")
-        if accept_screen_capture(capture_result, active_error, matches):
-            st.rerun()
-        if st.session_state.capture_error:
-            st.error(st.session_state.capture_error)
-        if not matches:
-            st.warning("No close support note found. You can still raise an issue.")
-        for index, article in enumerate(matches, start=1):
-            with st.container(border=True):
-                st.markdown(
-                    f"<span class='kb-id'>Knowledge base source · {article['id']} · {article['category']}</span>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(f"#### {article['title']}")
-                st.write(article["summary"])
-                with st.expander("Resolution steps", expanded=index == 1):
-                    for step in article["steps"]:
-                        st.markdown(f"- {step}")
-                    if st.button("Mark resolution as tried", key=f"customer_tried_{active_error['event_id']}_{article['id']}"):
-                        if article["id"] not in st.session_state.attempted_ids:
-                            st.session_state.attempted_ids.append(article["id"])
-                            st.session_state.attempted_steps.extend(article["steps"])
-                        st.success("Recorded with this customer-service event.")
-        if st.session_state.attempted_ids:
-            st.caption(f"Tried: {', '.join(st.session_state.attempted_ids)}")
+        render_insights_launcher("customer", "Open resolution insights")
 
     with operation:
         st.markdown("### Customer operation")
@@ -749,11 +799,11 @@ def render_customer_services(knowledge_base: LocalKnowledgeBase | None = None, g
                         from smartissue.host_adapter import triage_application_error
 
                         with st.spinner("Searching support guidance for this error…"):
-                            knowledge_source = ROOT / "data" / "knowledge_base.json"
-                            knowledge_hash = hashlib.sha256(knowledge_source.read_bytes()).hexdigest()
-                            _, resolution_graph = get_agent_resources(knowledge_hash)
+                            knowledge_hash = current_knowledge_hash()
+                            _, resolution_graph = get_agent_warmup_future(knowledge_hash).result()
                             st.session_state.triage = triage_application_error(resolution_graph, active_error)
                         st.session_state.customer_resolution_requested = True
+                        st.session_state.open_insights_dialog = True
                         st.rerun()
                     except (OSError, RuntimeError, ValueError) as error:
                         st.error(f"Support guidance could not be loaded: {error}")
@@ -1039,6 +1089,9 @@ def main() -> None:
     initialize_state()
     page = render_sidebar()
     render_customer_search()
+    if page == "Customer search":
+        knowledge_hash = current_knowledge_hash()
+        get_agent_warmup_future(knowledge_hash)
     active_error = st.session_state.get("active_error") or {}
     customer_issue_requires_knowledge = (
         active_error.get("application") == "Customer services · Web"
@@ -1054,9 +1107,8 @@ def main() -> None:
     else:
         try:
             with st.spinner("Preparing local knowledge search on first run…"):
-                knowledge_source = ROOT / "data" / "knowledge_base.json"
-                knowledge_source_hash = hashlib.sha256(knowledge_source.read_bytes()).hexdigest()
-                knowledge_base, graph = get_agent_resources(knowledge_source_hash)
+                knowledge_source_hash = current_knowledge_hash()
+                knowledge_base, graph = get_agent_warmup_future(knowledge_source_hash).result()
         except (OSError, RuntimeError, ValueError) as error:
             st.error(f"Local retrieval could not start: {error}")
             st.info("Check requirements.txt, model download access, and the configured model cache.")

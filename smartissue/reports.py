@@ -17,7 +17,15 @@ from .jira import build_jira_agent, jira_configured, jira_configuration_problem,
 ROOT = Path(__file__).resolve().parent.parent
 REPORTS_PATH = ROOT / ".data" / "reports"
 ALLOWED_IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
-KNOWLEDGE_IDS = {item["id"] for item in json.loads((ROOT / "data" / "knowledge_base.json").read_text(encoding="utf-8"))}
+KNOWLEDGE_PATHS = (ROOT / "data" / "knowledge_base.json", ROOT / ".data" / "jira_knowledge.json")
+
+
+def _knowledge_ids() -> set[str]:
+    ids: set[str] = set()
+    for path in KNOWLEDGE_PATHS:
+        if path.is_file():
+            ids.update(item["id"] for item in json.loads(path.read_text(encoding="utf-8")))
+    return ids
 
 
 def save_report(
@@ -86,6 +94,7 @@ def save_report(
         }
         and isinstance(value, str)
     }
+    known_knowledge_ids = _knowledge_ids()
     report: dict[str, Any] = {
         "report_id": report_id,
         "status": "awaiting_review",
@@ -95,7 +104,7 @@ def save_report(
         "issue_draft": issue_draft,
         "customer_id": customer_id or None,
         "application": application,
-        "knowledge_ids": sorted({item for item in knowledge_ids if item in KNOWLEDGE_IDS})[:5],
+        "knowledge_ids": sorted({item for item in knowledge_ids if item in known_knowledge_ids})[:5],
         "attempted_steps": [clean_text(step, 300) for step in attempted_steps[:10]],
         "diagnostics": safe_diagnostics,
         "screenshot_name": image_name,

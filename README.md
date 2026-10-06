@@ -3,7 +3,7 @@
 
 A Python and Streamlit prototype of the associate's banking workspace, with contextual RAG support, evidence review, and reviewer-approved Jira escalation.
 
-See [AGENTIC_AI_SOLUTION.md](AGENTIC_AI_SOLUTION.md) for the complete workflow, agent responsibilities, evidence/Jira handoff, configuration, and production boundaries. See [RAG_SOLUTION.md](RAG_SOLUTION.md) for JSON ingestion and retrieval details.
+See [ARCHITECTURE_LEARNING_GUIDE.md](ARCHITECTURE_LEARNING_GUIDE.md) for the complete end-to-end architecture, Python and library concepts, RAG implementation, setup, usage, configuration, testing, and production boundaries.
 
 ## Run locally
 

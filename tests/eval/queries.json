@@ -1,0 +1,21 @@
+[
+  {"query": "Card payment declined after verification", "expected": ["KB-1042"]},
+  {"query": "customer card was declined but a hold is still showing on the account", "expected": ["KB-1042"]},
+  {"query": "payment authorisation pending, should I retry the card payment", "expected": ["KB-1042"]},
+  {"query": "Bank transfer is still pending", "expected": ["KB-0871"]},
+  {"query": "transfer has not arrived, what is the expected arrival window", "expected": ["KB-0871"]},
+  {"query": "customer session is locked and stalled during a payment", "expected": ["KB-0228"]},
+  {"query": "session timed out how do I refresh without repeating the transfer", "expected": ["KB-0228"]},
+  {"query": "update customer address and contact details", "expected": ["KB-0712"]},
+  {"query": "demographic update failed when changing phone number", "expected": ["KB-0712"]},
+  {"query": "open an additional savings account for an existing customer", "expected": ["KB-1182"]},
+  {"query": "account opening could not be completed", "expected": ["KB-1182", "KB-1540"]},
+  {"query": "customer profile does not match the details submitted", "expected": ["KB-0936"]},
+  {"query": "name mismatch between submitted form and verified record", "expected": ["KB-0936"]},
+  {"query": "new account application is pending and incomplete", "expected": ["KB-1540"]},
+  {"query": "application stuck pending after account opening, do not start another", "expected": ["KB-1540"]},
+  {"query": "what is the weather forecast for tomorrow", "expected": []},
+  {"query": "recipe for chocolate chip cookies", "expected": []},
+  {"query": "who won the football match last night", "expected": []},
+  {"query": "how do I configure a kubernetes ingress controller", "expected": []}
+]
